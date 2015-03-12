@@ -974,7 +974,12 @@ def _list_all_attrs(item_or_album):
     longest = max(len(_) for _ in all_keys)
     for k in all_keys:
         fmt = "{0:<%d} {1}" % (longest + 1)
-        ui.print_(fmt.format(k, item_or_album.get(k)))
+        val = item_or_album.get(k)
+        try:
+            uf = fmt.format(k, val)
+        except:
+            uf = fmt.format(k, repr(val))
+        ui.print_(uf)
 
 
 def list_items_extensive(lib, query, album, fmt=''):
