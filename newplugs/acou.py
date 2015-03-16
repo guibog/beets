@@ -17,6 +17,59 @@ acou_cmd = Subcommand('acou', help='fetch acoustic analysis from acousticbrainz.
 acou_cmd.parser.add_option('--cache-dir', help='path to acoustic data files, use it instead of fetching website')
 def acou_func(lib, opts, args):
     print "Hello everybody! I'm a plugin! Acou", opts, args
+    query = decargs(args)
+    items = lib.items(query)
+    for item in items:
+        print item
+        if item.get('ab_ll_bpm') == None:
+            print "No acousticbrainz data fetched"
+            continue
+        for simit in _similar_items(lib, item):
+            print simit
+
+simi_att = [
+    'ab_hl_danceability',
+    'ab_hl_gender',
+    'ab_hl_genre_dortmund',
+    'ab_hl_genre_electronic',
+    'ab_hl_genre_rosamerica',
+    'ab_hl_genre_tzanetakis',
+    'ab_hl_ismir04_rhythm',
+    'ab_hl_mood_acoustic',
+    'ab_hl_mood_aggressive',
+    'ab_hl_mood_electronic',
+    'ab_hl_mood_happy',
+    'ab_hl_mood_party',
+    'ab_hl_mood_relaxed',
+    'ab_hl_mood_sad',
+    'ab_hl_moods_mirex',
+    'ab_hl_timbre',
+    'ab_hl_tonal_atonal',
+    'ab_hl_voice_instrumental',
+]
+
+simi_att1 = ['ab_hl_genre_dortmund']
+def _build_first_query(item):
+    q = []
+    for att in simi_att1:
+        if item.get(att):
+            q.append('%s:%s' % (att, item.get(att)))
+    return u' '.join(q)
+
+def _similar_items(lib, item):
+    query = _build_first_query(item)
+    print query
+    bpm = round(float(item.get('ab_ll_bpm', -1)) * 10)
+    key = item.get('ab_ll_key_key')
+    for simit in lib.items(query):
+        if round(float(simit.get('ab_ll_bpm', -1)) * 10) != bpm:
+            #print simit, "not same bpm", [bpm, round(float(simit.get('ab_ll_bpm', -1)) * 10)]
+            continue
+#        if simit.get('ab_ll_key_key') != key:
+#            print "not same key:", [key, simit.get('ab_ll_key_key')]
+#            continue
+        yield simit
+
 acou_cmd.func = acou_func
 
 def _should_fetch(tp, item, opts):
