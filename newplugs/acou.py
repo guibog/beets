@@ -16,7 +16,6 @@ PROBABILITY_THRESHOLD = 0.8
 acou_cmd = Subcommand('acou', help='fetch acoustic analysis from acousticbrainz.org')
 acou_cmd.parser.add_option('--cache-dir', help='path to acoustic data files, use it instead of fetching website')
 def acou_func(lib, opts, args):
-    print "Hello everybody! I'm a plugin! Acou", opts, args
     query = decargs(args)
     items = lib.items(query)
     for item in items:
@@ -65,8 +64,8 @@ def _similar_items(lib, item):
         if round(float(simit.get('ab_ll_bpm', -1)) * 10) != bpm:
             #print simit, "not same bpm", [bpm, round(float(simit.get('ab_ll_bpm', -1)) * 10)]
             continue
-#        if simit.get('ab_ll_key_key') != key:
-#            print "not same key:", [key, simit.get('ab_ll_key_key')]
+        if simit.get('ab_ll_key_key') != key:
+            print "not same key:", [key, simit.get('ab_ll_key_key')]
 #            continue
         yield simit
 
@@ -97,16 +96,24 @@ def _should_fetch(tp, item, opts):
 
 def acoufetch_func(lib, opts, args):
     query = decargs(args)
+    #proxy = urllib2.ProxyHandler({'http': '10.8.8.1:8118'})
+    #opener = urllib2.build_opener(proxy)
+    #urllib2.install_opener(opener)
     for item in lib.items(query):
         deb("May fetch acoustic data for: %s", item)
-        if _should_fetch('low-level', item, opts):
-            data_ll = _fetch('low-level', item.mb_trackid, opts)
-            dll = _make_data_ll(data_ll)
-            _save(item, dll)
-        if _should_fetch('high-level', item, opts):
-            data_hl = _fetch('high-level', item.mb_trackid, opts)
-            dhl = _make_data_hl(data_hl)
-            _save(item, dhl)
+        try:
+            if _should_fetch('low-level', item, opts):
+                data_ll = _fetch('low-level', item.mb_trackid, opts)
+                dll = _make_data_ll(data_ll)
+                _save(item, dll)
+            if _should_fetch('high-level', item, opts):
+                data_hl = _fetch('high-level', item.mb_trackid, opts)
+                dhl = _make_data_hl(data_hl)
+                _save(item, dhl)
+        except KeyboardInterrupt:
+            break
+        except Exception, err:
+            log.error("Got an error trying to fetch %s: %s", item, err)
 
 ACOUSTICBRAINZ_URL = "http://acousticbrainz.org/%s/%s"
 
@@ -121,7 +128,7 @@ def _fetch_from_api(tp, mbid):
     url = ACOUSTICBRAINZ_URL % (mbid, tp)
     deb("Fetching from %r", url)
     try:
-        data = urllib2.urlopen(url)
+        data = urllib2.urlopen(url, timeout=20)
     except urllib2.HTTPError:
         return {}
     try:
