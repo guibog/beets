@@ -20,7 +20,8 @@ def acou_func(lib, opts, args):
     query = decargs(args)
     items = lib.items(query)
     for item in items:
-        print item
+        print
+        print "##", item
         if item.get('ab_ll_bpm') == None:
             print "No acousticbrainz data fetched"
             continue
@@ -56,7 +57,117 @@ def _build_first_query(item):
             q.append('%s:%s' % (att, item.get(att)))
     return u' '.join(q)
 
+acoucache = '/tmp/acoucache'
+def _get_all_extrema(lib):
+    import marshal
+    flush = False
+    #flush = True
+    if os.path.exists(acoucache) and not flush:
+        with open(acoucache) as f:
+            ret = marshal.load(f)
+    else:
+        ret = _get_all_extrema_subcache(lib)
+        with open(acoucache, 'w') as f:
+            marshal.dump(ret, f)
+    return ret
+
+def _get_all_extrema_subcache(lib):
+    sql = """
+        SELECT
+            key,
+            min(value*1.0) as min,
+            max(value*1.0) as max
+        FROM item_attributes
+        GROUP BY key
+    """
+    c = lib._connection().execute(sql)
+    r = c.fetchall()
+    return {_[0]: (_[1], _[2]) for _ in r}
+
+
+def _choose_most_extreme_val(item, all_extr):
+    curma = 0
+    attrs = []
+    for att in item:
+        if not att.startswith('ab_ll_'):
+            continue
+        if att in ['ab_ll_status']:
+            continue
+        val = item.get(att)
+        mi, ma = all_extr[att]
+        try:
+            mi, ma, val = float(mi), float(ma), float(val)
+        except ValueError:
+            continue
+        span = abs(ma - mi)
+        if span == 0:
+            continue
+        diffma = abs(ma - val) / span
+        #print att, mi, ma, span, diffma
+        if diffma > curma:
+            mostma = att
+            curma = diffma
+        attrs.append((diffma, att))
+    attrs.sort()
+    return [_ for x, _ in attrs]
+    return attrs[0][1], attrs[-1][1]
+
 def _similar_items(lib, item):
+    all_extremas = _get_all_extrema(lib)
+    attrs = _choose_most_extreme_val(item, all_extremas)
+    print attrs
+    #qwedqw
+    for attr in attrs:
+        for simi in _get_simi(attr, item, lib):
+            yield simi
+
+def _get_simi(attr, item, lib):
+    print
+    print ">>> Listing on", attr
+    val = item.get(attr)
+    sql = """
+        SELECT
+            av.entity_id,
+            abs(av.value*1.0 - ?) as rank
+        FROM item_attributes av
+        WHERE av.key = ?
+            AND av.entity_id != ?
+        oRDER BY rank LIMIT 5
+    """
+    c = lib._connection().execute(sql, (val, attr, item.id))
+    on = c.fetchall()
+    for simit in on:
+        print lib.get_item(simit[0])
+    return []
+
+def _get_simi_for_mean_var(attr, item):
+    attr_mean = attr + '_mean'
+    attr_var = attr + '_var'
+    val_var = item.get(attr_var)
+    val_mean = item.get(attr_mean)
+    sql = """
+        SELECT
+            av.entity_id,
+            abs(av.value - ?) + abs(am.value - ?) as rank
+        FROM item_attributes av
+        JOIN item_attributes am
+            ON av.entity_id = am.entity_id
+        WHERE av.key = ?
+            AND am.key = ?
+            AND av.entity_id != ?
+        ORDER BY rank LIMIT 5
+    """
+
+    print sql
+    c = lib._connection().execute(sql, (val_var, val_mean,
+        attr_var, attr_mean, item.id))
+    on = c.fetchall()
+    print on
+    for simit in on:
+        print lib.get_item(simit[0])
+    return []
+
+def _similar_items_old(lib, item):
     query = _build_first_query(item)
     print query
     bpm = round(float(item.get('ab_ll_bpm', -1)) * 10)
