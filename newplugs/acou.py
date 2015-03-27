@@ -12,20 +12,7 @@ log = logging.getLogger('beets.acou')
 deb = log.debug
 isa = isinstance
 PROBABILITY_THRESHOLD = 0.8
-
-acou_cmd = Subcommand('acou', help='fetch acoustic analysis from acousticbrainz.org')
-acou_cmd.parser.add_option('--cache-dir', help='path to acoustic data files, use it instead of fetching website')
-def acou_func(lib, opts, args):
-    query = decargs(args)
-    items = lib.items(query)
-    for item in items:
-        print
-        print "##", item
-        if item.get('ab_ll_bpm') == None:
-            print "No acousticbrainz data fetched"
-            continue
-        for simit in _similar_items(lib, item):
-            print simit
+ACOUSTICBRAINZ_URL = "http://acousticbrainz.org/%s/%s"
 
 simi_att = [
     'ab_hl_danceability',
@@ -180,7 +167,6 @@ def _similar_items_old(lib, item):
 #            continue
         yield simit
 
-acou_cmd.func = acou_func
 
 def _should_fetch(tp, item, opts):
     tp_ = {'low-level': 'll', 'high-level': 'hl'}[tp]
@@ -207,26 +193,26 @@ def _should_fetch(tp, item, opts):
 
 def acoufetch_func(lib, opts, args):
     query = decargs(args)
-    #proxy = urllib2.ProxyHandler({'http': '10.8.8.1:8118'})
-    #opener = urllib2.build_opener(proxy)
-    #urllib2.install_opener(opener)
     for item in lib.items(query):
         deb("May fetch acoustic data for: %s", item)
         try:
             if _should_fetch('low-level', item, opts):
                 data_ll = _fetch('low-level', item.mb_trackid, opts)
                 dll = _make_data_ll(data_ll)
-                _save(item, dll)
+                _save_to_lib(item, dll)
+                if opts.save:
+                    _save_to_file('low-level', opts.save, item.mb_trackid, data_ll)
             if _should_fetch('high-level', item, opts):
                 data_hl = _fetch('high-level', item.mb_trackid, opts)
                 dhl = _make_data_hl(data_hl)
-                _save(item, dhl)
+                _save_to_lib(item, dhl)
+                if opts.save:
+                    _save_to_file('high-level', opts.save, item.mb_trackid, data_hl)
         except KeyboardInterrupt:
             break
         except Exception, err:
             log.error("Got an error trying to fetch %s: %s", item, err)
 
-ACOUSTICBRAINZ_URL = "http://acousticbrainz.org/%s/%s"
 
 def _fetch(tp, mbid, opts):
     if opts.fetched_files_dir:
@@ -298,20 +284,47 @@ def _make_data_ll(data_ll):
         d['ab_ll_bpm_round'] = int(round(float(d['ab_ll_bpm'])))
     return d
 
-def _save(item, data):
+def _save_to_lib(item, data):
     deb("Saved acoustic data on %s", item)
     item.update(data)
     ui.show_model_changes(item)
     item.try_sync(False)  # Todo pass write, see beets/ui/commands.py:1314
 
+def _save_to_file(tp_, dir_, mbid, data):
+    path = os.path.join(dir_, "%s.%s" % (mbid, tp_))
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=4, sort_keys=True, separators=(',', ':'))
+    deb("Saved data to file %r" % path)
+
+def acou_func(lib, opts, args):
+    query = decargs(args)
+    items = lib.items(query)
+    for item in items:
+        print
+        print "##", item
+        if item.get('ab_ll_bpm') == None:
+            print "No acousticbrainz data fetched"
+            continue
+        for simit in _similar_items(lib, item):
+            print simit
+
+
 acoufetch_cmd = Subcommand('acoufetch', help='fetch acousticbrainz data')
-acoufetch_cmd.parser.add_option('--fetched-files-dir', help="if acousticbrainz "
+apa = acoufetch_cmd.parser.add_option
+apa('--fetched-files-dir', help="if acousticbrainz "
     "jsons have already been fetched in a dir")
-acoufetch_cmd.parser.add_option('-f', '--force', action='store_true',
+apa('-s', '--save',
+    help='save acousticbrainz data to files in this dir')
+apa('-f', '--force', action='store_true',
     help='force refetching even if data exists already')
-acoufetch_cmd.parser.add_option('-m', '--missing', action='store_true',
+apa('-m', '--missing', action='store_true',
     help='force refetching analysis marked as missing in a previous check')
 acoufetch_cmd.func = acoufetch_func
+
+acou_cmd = Subcommand('acou', help='fetch acoustic analysis from acousticbrainz.org')
+acou_cmd.parser.add_option('--cache-dir', help='path to acoustic data files, use it instead of fetching website')
+acou_cmd.func = acou_func
+
 
 class AcouPlug(BeetsPlugin):
     def __init__(self):
