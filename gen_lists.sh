@@ -1,0 +1,1 @@
+sqlite3 ~/beet_musiclibrary.blb <<< " select path from item_attributes join items on items.id = entity_id where key = 'ab_ll_melbands_kurtosis_var' order by value; " > all_sorted_by_ab_ll_melbands_kurtosis_var
