@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import urllib2
 import time
@@ -309,6 +310,125 @@ def acou_func(lib, opts, args):
             print simit
 
 
+# -------- Analysis
+
+class minmax(object):
+    def __init__(self):
+        self.min = None
+        self.max = None
+        self.count = 0
+
+    def add(self, v):
+        self.count += 1
+        if self.min is None:
+            self.min = v
+        if self.max is None:
+            self.max = v
+        if self.max < v:
+            self.max = v
+        if self.min > v:
+            self.min = v
+
+    def variat(self):
+        return ((self.max - self.min) / self.count)
+
+    def __repr__(self):
+        return "mm(%s: %s, %s)" % (self.count, self.min, self.max)
+
+from random import random
+
+def _add(bag, kk, vv):
+    if kk not in bag:
+        bag[kk] = minmax()
+    assert isa(vv, (float, int))
+    bag[kk].add(vv)
+
+def add_dd(bag, j):
+    for k, v in j.items():
+        if isa(v, dict):
+            if 'probability' in v:
+                # highlevel
+                _add(bag, k, v['probability'])
+                continue
+            for k2, vv in v.items():
+                if isa(vv, float):
+                    kk = k + '_' + k2
+                    _add(bag, kk, vv)
+        else:
+            continue
+
+class adder():
+    def __init__(self):
+        self.count = 0
+        self.sum = 0
+    def add(self, v):
+        self.count += 1
+        self.sum += v
+    def avg(self):
+        return self.sum / self.count
+    def __repr__(self):
+        return "s(%s: %s)" % (self.count, self.sum)
+
+def acou_ana_data(bag, globag):
+    metrics = {}
+    for abid, v in bag.iteritems():
+        for metric, vv in v.items():
+            if metric not in metrics:
+                metrics[metric] = adder()
+            if vv.count > 1:
+                metrics[metric].add(vv.variat())
+    sor = []
+    for m in metrics:
+        if metrics[m].count and globag[m].variat():
+            mm = metrics[m].avg() / globag[m].variat()
+            sor.append((mm, m))
+    sor.sort()
+    for mm, m in sor:
+        print m, mm, metrics[m], globag[m]
+
+def acou_ana(lib, opts, args):
+    path = opts.save
+    assert path
+    count = 0
+    bag = {}
+    globag = {}
+    for f in os.listdir(path):
+        count += 1
+        with open(os.path.join(path, f)) as fd:
+            if count % 100 == 0:
+                print '.',
+                sys.stdout.flush()
+            try:
+                j = json.load(fd)
+            except ValueError as err:
+                deb("Error with %r json: %r", f, err)
+                continue
+            try:
+                album_id = j['metadata']['tags']['musicbrainz_albumid'][0]
+                album = j['metadata']['tags']['album'][0]
+            except:
+                deb("Error with %r json, no musicbrainz_albumid", f)
+                continue
+            if not album_id.startswith('1'):  # test
+                continue
+            if album_id not in bag:
+                bag[album_id] = {}
+            if 'highlevel' in j:
+                j['highlevel']['random'] = {'probability': random.random()}
+                j['highlevel']['albumnamelen'] = {'probability': len(album)}
+                add_dd(bag[album_id], j['highlevel'])
+                add_dd(globag, j['highlevel'])
+            else:
+                add_dd(bag[album_id], j['lowlevel'])
+                add_dd(globag, j['lowlevel'])
+                #add_dd(bag, j['tonal'])
+                #add_dd(bag, j['rhythm'])
+        if count > 560 and 0:
+            break
+    print
+    acou_ana_data(bag, globag)
+
+
 acoufetch_cmd = Subcommand('acoufetch', help='fetch acousticbrainz data')
 apa = acoufetch_cmd.parser.add_option
 apa('--fetched-files-dir', help="if acousticbrainz "
@@ -325,10 +445,13 @@ acou_cmd = Subcommand('acou', help='fetch acoustic analysis from acousticbrainz.
 acou_cmd.parser.add_option('--cache-dir', help='path to acoustic data files, use it instead of fetching website')
 acou_cmd.func = acou_func
 
+acouana_cmd = Subcommand('acouana', help='analyses acoustic data')
+acouana_cmd.parser.add_option('-s', '--save', help='dir for acousticbrainz data files')
+acouana_cmd.func = acou_ana
 
 class AcouPlug(BeetsPlugin):
     def __init__(self):
         super(AcouPlug, self).__init__()
 
     def commands(self):
-        return [acou_cmd, acoufetch_cmd]
+        return [acou_cmd, acoufetch_cmd, acouana_cmd]
