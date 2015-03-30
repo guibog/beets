@@ -415,15 +415,17 @@ def acou_ana(lib, opts, args):
                 bag[album_id] = {}
             if 'highlevel' in j:
                 j['highlevel']['random'] = {'probability': random.random()}
-                j['highlevel']['albumnamelen'] = {'probability': len(album)}
+                j['highlevel']['albumnamelen'] = {'probability': len(album) * 1000.0 + random.random()}
                 add_dd(bag[album_id], j['highlevel'])
                 add_dd(globag, j['highlevel'])
             else:
                 add_dd(bag[album_id], j['lowlevel'])
                 add_dd(globag, j['lowlevel'])
-                #add_dd(bag, j['tonal'])
-                #add_dd(bag, j['rhythm'])
-        if count > 560 and 0:
+                add_dd(bag[album_id], j['tonal'])
+                add_dd(globag, j['tonal'])
+                add_dd(bag[album_id], j['rhythm'])
+                add_dd(globag, j['rhythm'])
+        if count > 160 and 0: # and 0:
             break
     print
     acou_ana_data(bag, globag)
