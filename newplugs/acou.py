@@ -337,10 +337,15 @@ class minmax(object):
 
 from random import random
 
+_too_many_zeroes = {}
 def _add(bag, kk, vv):
     if kk not in bag:
         bag[kk] = minmax()
     assert isa(vv, (float, int))
+    if vv == 0:
+        if kk not in _too_many_zeroes:
+            _too_many_zeroes[kk] = 0
+        _too_many_zeroes[kk] += 1
     bag[kk].add(vv)
 
 def add_dd(bag, j):
@@ -384,7 +389,10 @@ def acou_ana_data(bag, globag):
             sor.append((mm, m))
     sor.sort()
     for mm, m in sor:
-        print m, mm, metrics[m], globag[m]
+        if _too_many_zeroes.get(m, 0) > 10:
+            print m, "too many zeoes", _too_many_zeroes[m]
+        else:
+            print m, mm, metrics[m], globag[m]
 
 def acou_ana(lib, opts, args):
     path = opts.save
@@ -428,6 +436,52 @@ def acou_ana(lib, opts, args):
     print
     acou_ana_data(bag, globag)
 
+def _add_list(bag, path, j):
+    def _add(k, v):
+        if k not in bag:
+            bag[k] = []
+        bag[k].append((v, path))
+    for k, v in j.items():
+        if isa(v, dict):
+            for kk, vv in v.items():
+                metric = k + '_' + kk
+                if not isa(vv, (float, int)):
+                    continue
+                _add(metric, vv)
+        else:
+            pass #print k, type(v)
+
+def acoulist(lib, opts, args):
+    count = 0
+    bag = {}
+    for item in lib.items():
+        mbid = item.mb_trackid
+        path = item.path
+        if not mbid:
+            continue
+        fp = os.path.join(opts.save, "%s.low-level" % mbid)
+        if not os.path.exists(fp):
+            log.error("Missing low-level data for %s", item)
+            continue
+        with open(fp) as f:
+            try:
+                j = json.load(f)
+            except:
+                log.error("Error loading json file %r", fp)
+                continue
+        count += 1
+        _add_list(bag, path, j['lowlevel'])
+        _add_list(bag, path, j['rhythm'])
+        _add_list(bag, path, j['tonal'])
+        #if count > 10: break
+    for metric, lst in bag.iteritems():
+        _save_list(metric, lst)
+
+def _save_list(metric, lst):
+    lst.sort()
+    with open("lists/" + metric + '.list', 'w') as f:
+        for val, path in lst:
+            f.write("{:0>15.4g} {}\n".format(val, path))
 
 acoufetch_cmd = Subcommand('acoufetch', help='fetch acousticbrainz data')
 apa = acoufetch_cmd.parser.add_option
@@ -449,9 +503,13 @@ acouana_cmd = Subcommand('acouana', help='analyses acoustic data')
 acouana_cmd.parser.add_option('-s', '--save', help='dir for acousticbrainz data files')
 acouana_cmd.func = acou_ana
 
+acoulist_cmd = Subcommand('acoulist', help='generate sorted lists')
+acoulist_cmd.parser.add_option('-s', '--save', help='dir for acousticbrainz data files')
+acoulist_cmd.func = acoulist
+
 class AcouPlug(BeetsPlugin):
     def __init__(self):
         super(AcouPlug, self).__init__()
 
     def commands(self):
-        return [acou_cmd, acoufetch_cmd, acouana_cmd]
+        return [acou_cmd, acoufetch_cmd, acouana_cmd, acoulist_cmd]
