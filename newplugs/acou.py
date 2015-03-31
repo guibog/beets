@@ -351,7 +351,7 @@ def add_dd(bag, j):
                 _add(bag, k, v['probability'])
                 continue
             for k2, vv in v.items():
-                if isa(vv, float):
+                if isa(vv, (float, int)):
                     kk = k + '_' + k2
                     _add(bag, kk, vv)
         else:
@@ -401,15 +401,13 @@ def acou_ana(lib, opts, args):
             try:
                 j = json.load(fd)
             except ValueError as err:
-                deb("Error with %r json: %r", f, err)
+                log.error("Error with %r json: %r", f, err)
                 continue
             try:
                 album_id = j['metadata']['tags']['musicbrainz_albumid'][0]
                 album = j['metadata']['tags']['album'][0]
             except:
-                deb("Error with %r json, no musicbrainz_albumid", f)
-                continue
-            if not album_id.startswith('1'):  # test
+                log.error("Error with %r json, no musicbrainz_albumid", f)
                 continue
             if album_id not in bag:
                 bag[album_id] = {}
@@ -425,8 +423,8 @@ def acou_ana(lib, opts, args):
                 add_dd(globag, j['tonal'])
                 add_dd(bag[album_id], j['rhythm'])
                 add_dd(globag, j['rhythm'])
-        if count > 160 and 0: # and 0:
-            break
+        #if count > 160d 0: # and 0:
+        #    break
     print
     acou_ana_data(bag, globag)
 
